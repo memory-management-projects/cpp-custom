@@ -1,88 +1,75 @@
-#include "includes/PoolAllocator.h"
+#include "PoolAllocator.h"
 
-#include <memory>
 #include <cassert>
+#include <memory>
 
-cpp_custom::PoolAllocator::PoolAllocator(const std::size_t size, const std::size_t chunkSize, const bool resizeable)
-	: Allocator(size), m_ChunkSize(chunkSize), m_Head(nullptr), m_Resizeable(resizeable)
-{
-	assert(chunkSize >= sizeof(Chunk) && "Chunk size must be greater or equal to pointer size");
-	assert(size % chunkSize == 0 && "Total size must be a multiple of chunk size");
-	m_StartAddress = AllocateBlock();
-	m_Head = reinterpret_cast<Chunk*>(m_StartAddress);
-	m_Blocks.push_back(m_StartAddress);
-	m_CurrentBlock = 1;
+namespace cpp_custom {
+
+PoolAllocator::PoolAllocator(const std::size_t size, const std::size_t chunkSize, const bool resizeable)
+    : Allocator(size), m_ChunkSize(chunkSize), m_Head(nullptr), m_CurrentBlock(0), m_Resizeable(resizeable) {
+    assert(chunkSize >= sizeof(Chunk) && "Chunk size must be greater or equal to pointer size");
+    assert(size % chunkSize == 0 && "Total size must be a multiple of chunk size");
+    m_StartAddress = AllocateBlock();
+    m_Head = reinterpret_cast<Chunk *>(m_StartAddress);
+    m_Blocks.push_back(m_StartAddress);
+    m_CurrentBlock = 1;
 }
 
-cpp_custom::PoolAllocator::~PoolAllocator()
-{
-	for (auto& block : m_Blocks)
-	{
-		::operator delete(block);
-	}
-	m_StartAddress = nullptr;
+PoolAllocator::~PoolAllocator() {
+    for (auto &block : m_Blocks) {
+        ::operator delete(block);
+    }
+    m_StartAddress = nullptr;
 }
 
-void* cpp_custom::PoolAllocator::Allocate(const std::size_t size, const std::size_t alignment)
-{
-	assert(size == m_ChunkSize && "Allocation size must be equal to chunk size");
+void *PoolAllocator::Allocate(const std::size_t size, const std::size_t alignment) {
+    (void)alignment;
+    assert(size == m_ChunkSize && "Allocation size must be equal to chunk size");
 
-	if (m_Head == nullptr)
-	{
-		if (m_Resizeable)
-		{
-			if (m_CurrentBlock == m_Blocks.size())
-			{
-				m_Head = AllocateBlock();
-				m_Blocks.push_back(m_Head);
-				++m_CurrentBlock;
-			}
-			else
-			{
-				++m_CurrentBlock;
-				m_Head = reinterpret_cast<Chunk*>(m_Blocks[m_CurrentBlock - 1]);
-			}
-		}
-		else
-		{
-			return nullptr;
-		}
-	}
+    if (m_Head == nullptr) {
+        if (m_Resizeable) {
+            if (m_CurrentBlock == m_Blocks.size()) {
+                m_Head = AllocateBlock();
+                m_Blocks.push_back(m_Head);
+                ++m_CurrentBlock;
+            } else {
+                ++m_CurrentBlock;
+                m_Head = reinterpret_cast<Chunk *>(m_Blocks[m_CurrentBlock - 1]);
+            }
+        } else {
+            return nullptr;
+        }
+    }
 
-	Chunk* chunk = m_Head;
-	if (chunk->m_Next == nullptr &&
-		(std::size_t)reinterpret_cast<char*>(chunk) + m_ChunkSize != (std::size_t)reinterpret_cast<char*>(m_Blocks[m_CurrentBlock - 1]) + m_Size)
-	{
-		m_Head = reinterpret_cast<Chunk*>(reinterpret_cast<char*>(chunk) + m_ChunkSize);
-		m_Head->m_Next = nullptr;
-	}
-	else
-	{
-		m_Head = m_Head->m_Next;
-	}
+    Chunk *chunk = m_Head;
+    if (chunk->m_Next == nullptr &&
+        (std::size_t)reinterpret_cast<char *>(chunk) + m_ChunkSize != (std::size_t)reinterpret_cast<char *>(m_Blocks[m_CurrentBlock - 1]) + m_Size) {
+        m_Head = reinterpret_cast<Chunk *>(reinterpret_cast<char *>(chunk) + m_ChunkSize);
+        m_Head->m_Next = nullptr;
+    } else {
+        m_Head = m_Head->m_Next;
+    }
 
-	return chunk;
+    return chunk;
 }
 
-void cpp_custom::PoolAllocator::Deallocate(void* ptr)
-{
-	reinterpret_cast<Chunk*>(ptr)->m_Next = m_Head;
-	m_Head = reinterpret_cast<Chunk*>(ptr);
+void PoolAllocator::Deallocate(void *ptr) {
+    reinterpret_cast<Chunk *>(ptr)->m_Next = m_Head;
+    m_Head = reinterpret_cast<Chunk *>(ptr);
 }
 
-void cpp_custom::PoolAllocator::Reset()
-{
-	for (auto& block : m_Blocks)
-	{
-		reinterpret_cast<Chunk*>(block)->m_Next = nullptr;
-	}
-	m_Head = reinterpret_cast<Chunk*>(m_StartAddress);
-	m_CurrentBlock = 1;
+void PoolAllocator::Reset() {
+    for (auto &block : m_Blocks) {
+        reinterpret_cast<Chunk *>(block)->m_Next = nullptr;
+    }
+    m_Head = reinterpret_cast<Chunk *>(m_StartAddress);
+    m_CurrentBlock = 1;
 }
 
-cpp_custom::PoolAllocator::Chunk* A5::PoolAllocator::AllocateBlock()
-{
-	Chunk* block = reinterpret_cast<Chunk*>(::operator new(m_Size));
-	block->m_Next = nullptr;
-	return block;
+PoolAllocator::Chunk *PoolAllocator::AllocateBlock() {
+    Chunk *block = reinterpret_cast<Chunk *>(::operator new(m_Size));
+    block->m_Next = nullptr;
+    return block;
 }
+
+} // namespace cpp_custom

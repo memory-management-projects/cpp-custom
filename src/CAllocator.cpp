@@ -1,12 +1,18 @@
-#include "includes/CAllocator.h"
+#include "CAllocator.h"
 
-cpp_custom::CAllocator::CAllocator() : Allocator(0) {}
+namespace cpp_custom {
 
-void *cpp_custom::CAllocator::Allocate(const std::size_t size,
-                                       const std::size_t alignment) {
-  return ::operator new(size);
+CAllocator::CAllocator() : Allocator(0) {}
+
+void *CAllocator::Allocate(const std::size_t size, const std::size_t alignment) {
+    (void)alignment;
+    return ::operator new(size);
 }
 
-void cpp_custom::CAllocator::Deallocate(void *ptr) { ::operator delete(ptr); }
+void CAllocator::Deallocate(void *ptr) {
+    ::operator delete(ptr);
+}
 
-void cpp_custom::CAllocator::Reset() {}
+void CAllocator::Reset() {}
+
+} // namespace cpp_custom

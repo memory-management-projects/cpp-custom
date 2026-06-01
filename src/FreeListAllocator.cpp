@@ -1,134 +1,116 @@
-#include "includes/FreeListAllocator.h"
+#include "FreeListAllocator.h"
 
-#include <memory>
 #include <cassert>
+#include <memory>
 #include <string>
 
-cpp_custom::FreeListAllocator::FreeListAllocator(const std::size_t size, const SearchMethod searchMethod)
-	: Allocator(size)
-{
-	static std::string message = "Total size must be atleast " + std::to_string(sizeof(LinkedList::Node) + 1) + " bytes for an allocator with atleast 1 byte of free space";
-	assert(size >= sizeof(LinkedList::Node) + 1 && message.c_str());
-	m_SearchMethod = searchMethod;
-	m_StartAddress = ::operator new(size);
-	Init();
+namespace cpp_custom {
+
+FreeListAllocator::FreeListAllocator(const std::size_t size, const SearchMethod searchMethod)
+    : Allocator(size), m_SearchMethod(searchMethod) {
+    static std::string message = "Total size must be atleast " + std::to_string(sizeof(LinkedList::Node) + 1) + " bytes for an allocator with atleast 1 byte of free space";
+    assert(size >= sizeof(LinkedList::Node) + 1 && message.c_str());
+    m_StartAddress = ::operator new(size);
+    Init();
 }
 
-cpp_custom::FreeListAllocator::~FreeListAllocator()
-{
-	::operator delete(m_StartAddress);
-	m_StartAddress = nullptr;
+FreeListAllocator::~FreeListAllocator() {
+    ::operator delete(m_StartAddress);
+    m_StartAddress = nullptr;
 }
 
-void* cpp_custom::FreeListAllocator::Allocate(const std::size_t size, const std::size_t alignment)
-{
-	std::size_t padding;
-	void* currentAddress = (void*)(sizeof(Header) + size);
-	void* nextAddress = (void*)(sizeof(Header) + size);
-	std::size_t space = size + 100;
-	std::align(alignof(std::max_align_t), sizeof(std::max_align_t), nextAddress, space);
-	padding = (std::size_t)nextAddress - (std::size_t)currentAddress;
+void *FreeListAllocator::Allocate(const std::size_t size, const std::size_t alignment) {
+    (void)alignment;
+    std::size_t padding;
+    void *currentAddress = (void *)(sizeof(Header) + size);
+    void *nextAddress = (void *)(sizeof(Header) + size);
+    std::size_t space = size + 100;
+    std::align(alignof(std::max_align_t), sizeof(std::max_align_t), nextAddress, space);
+    padding = (std::size_t)nextAddress - (std::size_t)currentAddress;
 
-	LinkedList::Node* prev;
-	LinkedList::Node* best;
+    LinkedList::Node *prev = nullptr;
+    LinkedList::Node *best = nullptr;
 
-	switch (m_SearchMethod)
-	{
-	case SearchMethod::FIRST:
-		m_List.SearchFirst(size + padding, best, prev);
-		break;
-	case SearchMethod::BEST:
-		m_List.SearchBest(size + padding, best, prev);
-		break;
-	}
+    switch (m_SearchMethod) {
+    case SearchMethod::FIRST:
+        m_List.SearchFirst(size + padding, best, prev);
+        break;
+    case SearchMethod::BEST:
+        m_List.SearchBest(size + padding, best, prev);
+        break;
+    }
 
-	if (best == nullptr)
-	{
-		return nullptr;
-	}
+    if (best == nullptr) {
+        return nullptr;
+    }
 
-	if (best->m_Value >= size + padding + sizeof(LinkedList::Node*) + 1)
-	{
-		LinkedList::Node* splittedNode = reinterpret_cast<LinkedList::Node*>(reinterpret_cast<char*>(best) + sizeof(Header) + size + padding);
-		splittedNode->m_Value = best->m_Value - (size + padding + sizeof(Header));
-		splittedNode->m_Next = best->m_Next;
-		best->m_Next = splittedNode;
-	}
-	else
-	{
-		padding += best->m_Value - (size + padding);
-	}
+    if (best->m_Value >= size + padding + sizeof(LinkedList::Node *) + 1) {
+        LinkedList::Node *splittedNode = reinterpret_cast<LinkedList::Node *>(reinterpret_cast<char *>(best) + sizeof(Header) + size + padding);
+        splittedNode->m_Value = best->m_Value - (size + padding + sizeof(Header));
+        splittedNode->m_Next = best->m_Next;
+        best->m_Next = splittedNode;
+    } else {
+        padding += best->m_Value - (size + padding);
+    }
 
-	if (prev == nullptr)
-	{
-		m_List.m_Head = best->m_Next;
-	}
-	else
-	{
-		prev->m_Next = best->m_Next;
-	}
+    if (prev == nullptr) {
+        m_List.m_Head = best->m_Next;
+    } else {
+        prev->m_Next = best->m_Next;
+    }
 
-	Header* header = reinterpret_cast<Header*>(best);
-	header->m_Size = size + padding;
+    Header *header = reinterpret_cast<Header *>(best);
+    header->m_Size = size + padding;
 
-	return reinterpret_cast<char*>(best) + sizeof(Header);
+    return reinterpret_cast<char *>(best) + sizeof(Header);
 }
 
-void cpp_custom::FreeListAllocator::Deallocate(void* ptr)
-{
-	Header* header = reinterpret_cast<Header*>(reinterpret_cast<char*>(ptr) - sizeof(Header));
+void FreeListAllocator::Deallocate(void *ptr) {
+    Header *header = reinterpret_cast<Header *>(reinterpret_cast<char *>(ptr) - sizeof(Header));
 
-	LinkedList::Node* node = reinterpret_cast<LinkedList::Node*>(header);
-	node->m_Value = header->m_Size;
+    LinkedList::Node *node = reinterpret_cast<LinkedList::Node *>(header);
+    node->m_Value = header->m_Size;
 
-	LinkedList::Node* prevIt = nullptr;
-	LinkedList::Node* it = m_List.m_Head;
-	while (it != nullptr)
-	{
-		if (node < it)
-		{
-			node->m_Next = it;
-			if (prevIt == nullptr)
-			{
-				m_List.m_Head = node;
-			}
-			else
-			{
-				prevIt->m_Next = node;
-			}
-			break;
-		}
-		prevIt = it;
-		it = it->m_Next;
-	}
+    LinkedList::Node *prevIt = nullptr;
+    LinkedList::Node *it = m_List.m_Head;
+    while (it != nullptr) {
+        if (node < it) {
+            node->m_Next = it;
+            if (prevIt == nullptr) {
+                m_List.m_Head = node;
+            } else {
+                prevIt->m_Next = node;
+            }
+            break;
+        }
+        prevIt = it;
+        it = it->m_Next;
+    }
 
-	Coalescence(prevIt, node);
+    Coalescence(prevIt, node);
 }
 
-void cpp_custom::FreeListAllocator::Reset()
-{
-	Init();
+void FreeListAllocator::Reset() {
+    Init();
 }
 
-void cpp_custom::FreeListAllocator::Init()
-{
-	LinkedList::Node* head = reinterpret_cast<LinkedList::Node*>(m_StartAddress);
-	head->m_Value = m_Size - sizeof(Header);
-	head->m_Next = nullptr;
-	m_List.m_Head = head;
+void FreeListAllocator::Init() {
+    LinkedList::Node *head = reinterpret_cast<LinkedList::Node *>(m_StartAddress);
+    head->m_Value = m_Size - sizeof(Header);
+    head->m_Next = nullptr;
+    m_List.m_Head = head;
 }
 
-void cpp_custom::FreeListAllocator::Coalescence(LinkedList::Node* prev, LinkedList::Node* curr)
-{
-	if (curr->m_Next != nullptr && (std::size_t)curr + curr->m_Value + sizeof(Header) == (std::size_t)curr->m_Next)
-	{
-		curr->m_Value += curr->m_Next->m_Value + sizeof(Header);
-		curr->m_Next = curr->m_Next->m_Next;
-	}
+void FreeListAllocator::Coalescence(LinkedList::Node *prev, LinkedList::Node *curr) {
+    if (curr->m_Next != nullptr && (std::size_t)curr + curr->m_Value + sizeof(Header) == (std::size_t)curr->m_Next) {
+        curr->m_Value += curr->m_Next->m_Value + sizeof(Header);
+        curr->m_Next = curr->m_Next->m_Next;
+    }
 
-	if (prev != nullptr && (std::size_t)prev + prev->m_Value + sizeof(Header) == (std::size_t)curr)
-	{
-		prev->m_Value += curr->m_Value + sizeof(Header);
-		prev->m_Next = curr->m_Next;
-	}
+    if (prev != nullptr && (std::size_t)prev + prev->m_Value + sizeof(Header) == (std::size_t)curr) {
+        prev->m_Value += curr->m_Value + sizeof(Header);
+        prev->m_Next = curr->m_Next;
+    }
 }
+
+} // namespace cpp_custom
